@@ -1,0 +1,7 @@
+{
+  "remote": "Remote",
+  "start": "Start",
+  "stop": "Stop",
+  "running": "Running",
+  "stopped": "Stopped"
+}

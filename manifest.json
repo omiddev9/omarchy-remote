@@ -1,0 +1,10 @@
+{
+  "name": "omarchy-remote",
+  "version": "1.0.0",
+  "description": "Remote desktop access via WayVNC",
+  "kinds": ["bar-widget", "service"],
+  "entryPoints": {
+    "bar-widget": "BarWidget.qml",
+    "service": "Service.qml"
+  }
+}
