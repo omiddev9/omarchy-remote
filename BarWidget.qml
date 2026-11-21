@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Ui as Ui
-import qs.Commons as Commons
 
 Ui.BarWidget {
     id: root
