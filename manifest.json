@@ -1,10 +1,22 @@
 {
-  "name": "omarchy-remote",
+  "schemaVersion": 1,
+  "id": "io.github.omiddev9.omarchy-remote",
+  "name": "Omarchy Remote",
   "version": "1.0.0",
+  "author": "omiddev9",
+  "license": "MIT",
+  "homepage": "https://github.com/omiddev9/omarchy-remote",
   "description": "Remote desktop access via WayVNC",
   "kinds": ["bar-widget", "service"],
   "entryPoints": {
-    "bar-widget": "BarWidget.qml",
+    "barWidget": "BarWidget.qml",
     "service": "Service.qml"
+  },
+  "barWidget": {
+    "displayName": "Remote Desk",
+    "description": "Start or stop the WayVNC remote desktop server",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
   }
 }
