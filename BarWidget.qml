@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import qs.Ui as Ui
 
 Ui.BarWidget {
@@ -9,28 +10,70 @@ Ui.BarWidget {
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
 
-    property var remoteService: null
+    property string status: "stopped"
+    property string ip: "unknown"
+    property bool busy: false
 
-    function findService() {
-        if (root.remoteService) return
-        var shell = root.bar ? root.bar.shell : null
-        root.remoteService = shell && typeof shell.serviceFor === "function"
-            ? shell.serviceFor(root.moduleName) : null
+    readonly property string script: decodeURIComponent(Qt.resolvedUrl("bin/server.sh").toString().replace(/^file:\/\//, ""))
+    readonly property bool running: status === "running"
+
+    function refresh() {
+        if (!statusProc.running) statusProc.running = true
+        if (!ipProc.running) ipProc.running = true
+    }
+
+    function toggle() {
+        if (busy || actionProc.running) return
+        busy = true
+        actionProc.command = ["/usr/bin/bash", script, running ? "stop" : "start"]
+        actionProc.running = true
+    }
+
+    Process {
+        id: statusProc
+        command: ["/usr/bin/bash", root.script, "status"]
+        stdout: StdioCollector {
+            id: statusOut
+            waitForEnd: true
+            onStreamFinished: {
+                var value = String(text || "").trim()
+                root.status = value.length > 0 ? value : "stopped"
+            }
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: ipProc
+        command: ["/usr/bin/bash", root.script, "ip"]
+        stdout: StdioCollector {
+            id: ipOut
+            waitForEnd: true
+            onStreamFinished: {
+                var value = String(text || "").trim()
+                if (value.length > 0) root.ip = value
+            }
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: actionProc
+        stdout: StdioCollector { waitForEnd: true }
+        stderr: StdioCollector { waitForEnd: true }
+        onExited: function(code) {
+            root.busy = false
+            root.refresh()
+        }
     }
 
     Timer {
-        interval: 1000
+        interval: 3000
+        running: true
         repeat: true
-        running: !root.remoteService
         triggeredOnStart: true
-        onTriggered: root.findService()
+        onTriggered: root.refresh()
     }
-
-    onBarChanged: root.findService()
-
-    readonly property string serviceStatus: root.remoteService ? String(root.remoteService.status || "stopped") : "stopped"
-    readonly property string serviceIp: root.remoteService ? String(root.remoteService.ip || "0.0.0.0") : "0.0.0.0"
-    readonly property bool running: serviceStatus === "running"
 
     RowLayout {
         id: row
@@ -49,17 +92,17 @@ Ui.BarWidget {
                 color: "#888"
             }
             Text {
-                text: root.serviceIp
+                text: root.ip + (root.running ? ":5900" : "")
                 font.pixelSize: 12
                 font.bold: true
             }
         }
 
         Ui.BarIconButton {
-            text: root.running ? "Stop" : "Start"
+            text: root.busy ? "..." : (root.running ? "Stop" : "Start")
+            enabled: !root.busy
             onPressed: function(mouseButton) {
-                if (root.remoteService && typeof root.remoteService.toggle === "function")
-                    root.remoteService.toggle()
+                root.toggle()
             }
         }
     }

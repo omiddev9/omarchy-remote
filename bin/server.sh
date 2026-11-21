@@ -1,7 +1,12 @@
 #!/usr/bin/bash
 
 get_ip() {
-    ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n1
+    local ip
+    ip=$(ip -4 addr show scope global 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n1)
+    if [[ -z "$ip" ]]; then
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    echo "${ip:-unknown}"
 }
 
 case "$1" in
