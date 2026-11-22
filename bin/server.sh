@@ -37,9 +37,9 @@ get_port() {
 case "$1" in
     "start")
         if ! pgrep -x wayvnc > /dev/null; then
-            # Render the cursor into the framebuffer and capture every output so
-            # pointer coordinates stay aligned on multi-monitor/mixed-scale setups.
-            wayvnc --render-cursor --desktop 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
+            # Low-latency setup for LAN: high FPS, let the client draw the cursor
+            # (faster than burning it into the framebuffer), single output.
+            wayvnc --max-fps=60 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
             echo "started"
         else
             echo "already running"
