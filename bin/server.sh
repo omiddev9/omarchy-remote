@@ -39,7 +39,9 @@ case "$1" in
         if ! pgrep -x wayvnc > /dev/null; then
             # Capture the focused output explicitly; fractional scaling and rotated
             # outputs (transform) confuse pointer mapping when left to autodetect.
-            output=$(hyprctl monitors 2>/dev/null | awk '/^Monitor / {print $2; exit}')
+            # Prefer the real panel (DSI/eDP) over virtual HEADLESS outputs.
+            output=$(hyprctl monitors 2>/dev/null | awk '/^Monitor / && $2 !~ /HEADLESS/ {print $2; exit}')
+            [ -n "$output" ] || output=$(hyprctl monitors 2>/dev/null | awk '/^Monitor / {print $2; exit}')
             if [ -n "$output" ]; then
                 wayvnc --output="$output" --max-fps=60 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
             else
