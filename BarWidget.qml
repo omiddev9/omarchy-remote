@@ -10,22 +10,27 @@ Ui.BarWidget {
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
 
-    property string status: "stopped"
-    property string ip: "unknown"
-    property bool busy: false
+    readonly property string pluginDir: decodeURIComponent(Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "")).replace(/\/+$/, "")
+    readonly property string script: root.pluginDir + "/bin/server.sh"
 
-    readonly property string script: decodeURIComponent(Qt.resolvedUrl("bin/server.sh").toString().replace(/^file:\/\//, ""))
-    readonly property bool running: status === "running"
+    property string status: "stopped"
+    property string ip: ""
+    property string port: ""
+
+    readonly property bool running: root.status === "running"
+    readonly property string displayIp: root.ip === "0.0.0.0" ? "" : root.ip
+    readonly property string displayAddress: root.displayIp === "" ? ""
+        : root.displayIp + (root.port !== "" ? ":" + root.port : "")
 
     function refresh() {
         if (!statusProc.running) statusProc.running = true
         if (!ipProc.running) ipProc.running = true
+        if (!portProc.running) portProc.running = true
     }
 
     function toggle() {
-        if (busy || actionProc.running) return
-        busy = true
-        actionProc.command = ["/usr/bin/bash", script, running ? "stop" : "start"]
+        if (actionProc.running) return
+        actionProc.command = ["/usr/bin/bash", root.script, root.running ? "stop" : "start"]
         actionProc.running = true
     }
 
@@ -33,7 +38,6 @@ Ui.BarWidget {
         id: statusProc
         command: ["/usr/bin/bash", root.script, "status"]
         stdout: StdioCollector {
-            id: statusOut
             waitForEnd: true
             onStreamFinished: {
                 var value = String(text || "").trim()
@@ -47,11 +51,23 @@ Ui.BarWidget {
         id: ipProc
         command: ["/usr/bin/bash", root.script, "ip"]
         stdout: StdioCollector {
-            id: ipOut
             waitForEnd: true
             onStreamFinished: {
                 var value = String(text || "").trim()
-                if (value.length > 0) root.ip = value
+                root.ip = (value.length > 0 && value !== "0.0.0.0") ? value : ""
+            }
+        }
+        stderr: StdioCollector { waitForEnd: true }
+    }
+
+    Process {
+        id: portProc
+        command: ["/usr/bin/bash", root.script, "port"]
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                var value = String(text || "").trim()
+                root.port = /^[0-9]+$/.test(value) ? value : ""
             }
         }
         stderr: StdioCollector { waitForEnd: true }
@@ -61,14 +77,11 @@ Ui.BarWidget {
         id: actionProc
         stdout: StdioCollector { waitForEnd: true }
         stderr: StdioCollector { waitForEnd: true }
-        onExited: function(code) {
-            root.busy = false
-            root.refresh()
-        }
+        onExited: root.refresh()
     }
 
     Timer {
-        interval: 3000
+        interval: 5000
         running: true
         repeat: true
         triggeredOnStart: true
@@ -92,15 +105,15 @@ Ui.BarWidget {
                 color: "#888"
             }
             Text {
-                text: root.ip + (root.running ? ":5900" : "")
+                visible: root.displayAddress !== ""
+                text: root.displayAddress
                 font.pixelSize: 12
                 font.bold: true
             }
         }
 
         Ui.BarIconButton {
-            text: root.busy ? "..." : (root.running ? "Stop" : "Start")
-            enabled: !root.busy
+            text: root.running ? "Stop" : "Start"
             onPressed: function(mouseButton) {
                 root.toggle()
             }

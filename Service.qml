@@ -15,7 +15,7 @@ Item {
     readonly property string script: pluginDir + "/bin/server.sh"
 
     property string status: "stopped"
-    property string ip: "0.0.0.0"
+    property string ip: ""
     property bool busy: false
 
     function updateStatus() {
@@ -56,7 +56,7 @@ Item {
             waitForEnd: true
             onStreamFinished: {
                 var value = String(text || "").trim()
-                if (value.length > 0) root.ip = value
+                root.ip = (value.length > 0 && value !== "0.0.0.0") ? value : ""
             }
         }
         stderr: StdioCollector { waitForEnd: true }

@@ -1,12 +1,37 @@
 #!/usr/bin/bash
 
 get_ip() {
-    local ip
-    ip=$(ip -4 addr show scope global 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n1)
-    if [[ -z "$ip" ]]; then
-        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    local addr
+    addr=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | grep -v '^127\.' | head -n1)
+    [ -n "$addr" ] || addr=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')
+    case "$addr" in
+        ""|0.0.0.0|127.*) ;;
+        *) echo "$addr" ;;
+    esac
+}
+
+get_port() {
+    local port=""
+    local cfg
+
+    # Prefer the port the running instance actually listens on.
+    if pgrep -x wayvnc > /dev/null 2>&1; then
+        port=$(ss -Hltnp 2>/dev/null | awk '/wayvnc/ { n = split($4, a, ":"); print a[n]; exit }')
     fi
-    echo "${ip:-unknown}"
+
+    # Otherwise read the configured port, then fall back to wayvnc's default.
+    if [ -z "$port" ]; then
+        cfg="${XDG_CONFIG_HOME:-$HOME/.config}/wayvnc/config"
+        [ -f "$cfg" ] || cfg=/etc/wayvnc/config
+        if [ -f "$cfg" ]; then
+            port=$(sed -n 's/^[[:space:]]*port[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cfg" | tail -n1)
+        fi
+    fi
+
+    case "$port" in
+        ""|*[!0-9]*) port=5900 ;;
+    esac
+    echo "$port"
 }
 
 case "$1" in
@@ -14,7 +39,7 @@ case "$1" in
         if ! pgrep -x wayvnc > /dev/null; then
             # Render the cursor into the framebuffer and capture every output so
             # pointer coordinates stay aligned on multi-monitor/mixed-scale setups.
-            wayvnc --render-cursor --desktop 0.0.0.0 > /tmp/wayvnc.log 2>&1 &
+            wayvnc --render-cursor --desktop 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
             echo "started"
         else
             echo "already running"
@@ -33,5 +58,8 @@ case "$1" in
         ;;
     "ip")
         get_ip
+        ;;
+    "port")
+        get_port
         ;;
 esac
