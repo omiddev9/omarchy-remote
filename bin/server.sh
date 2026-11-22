@@ -37,9 +37,14 @@ get_port() {
 case "$1" in
     "start")
         if ! pgrep -x wayvnc > /dev/null; then
-            # Low-latency setup for LAN: high FPS, let the client draw the cursor
-            # (faster than burning it into the framebuffer), single output.
-            wayvnc --max-fps=60 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
+            # Capture the focused output explicitly; fractional scaling and rotated
+            # outputs (transform) confuse pointer mapping when left to autodetect.
+            output=$(hyprctl monitors 2>/dev/null | awk '/^Monitor / {print $2; exit}')
+            if [ -n "$output" ]; then
+                wayvnc --output="$output" --max-fps=60 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
+            else
+                wayvnc --max-fps=60 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
+            fi
             echo "started"
         else
             echo "already running"
