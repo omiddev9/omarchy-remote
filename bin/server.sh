@@ -2,12 +2,27 @@
 
 STATE_FILE="/tmp/wayvnc-monitor.state"
 
-get_output() {
+get_source_output() {
     # Prefer the real panel (DSI/eDP) over virtual HEADLESS outputs.
     local output
     output=$(hyprctl monitors 2>/dev/null | awk '/^Monitor / && $2 !~ /HEADLESS/ {print $2; exit}')
     [ -n "$output" ] || output=$(hyprctl monitors 2>/dev/null | awk '/^Monitor / {print $2; exit}')
     echo "$output"
+}
+
+create_mirror_output() {
+    local src="$1"
+    local before after name
+    before=$(hyprctl monitors all -j 2>/dev/null | jq -r '.[].name' | grep '^HEADLESS-' | sort)
+    hyprctl output create headless >/dev/null 2>&1
+    sleep 0.5
+    after=$(hyprctl monitors all -j 2>/dev/null | jq -r '.[].name' | grep '^HEADLESS-' | sort)
+    name=$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n1)
+    [ -n "$name" ] || name=$(hyprctl monitors all -j 2>/dev/null | jq -r '.[] | select(.mirrorOf != "none") | .name' | tail -n1)
+    [ -n "$name" ] || return 1
+    hyprctl eval "hl.monitor({ output = \"$name\", mode = \"preferred\", position = \"0x0\", scale = 1, transform = 0, mirror = \"$src\" })" >/dev/null 2>&1
+    sleep 0.3
+    printf '%s\n' "$name"
 }
 
 get_ip() {
@@ -42,42 +57,29 @@ get_port() {
     echo "$port"
 }
 
-save_monitor_state() {
-    local output="$1"
-    hyprctl monitors -j 2>/dev/null | jq -r --arg out "$output" '
-        .[] | select(.name == $out) |
-        "output=\(.name)\nscale=\(.scale)\ntransform=\(.transform)\nx=\(.x)\ny=\(.y)"
-    ' > "$STATE_FILE"
-}
-
-restore_monitor_state() {
-    [ -f "$STATE_FILE" ] || return 0
-    # shellcheck disable=SC1090
-    . "$STATE_FILE"
-    [ -n "$output" ] || return 0
-    hyprctl eval "hl.monitor({ output = \"$output\", mode = \"preferred\", position = \"${x}x${y}\", scale = ${scale}, transform = ${transform} })" >/dev/null 2>&1
-    rm -f "$STATE_FILE"
-}
-
-set_scale_one() {
-    local output="$1"
-    local x y transform
-    x=$(hyprctl monitors -j 2>/dev/null | jq -r --arg out "$output" '.[] | select(.name == $out) | .x')
-    y=$(hyprctl monitors -j 2>/dev/null | jq -r --arg out "$output" '.[] | select(.name == $out) | .y')
-    transform=$(hyprctl monitors -j 2>/dev/null | jq -r --arg out "$output" '.[] | select(.name == $out) | .transform')
-    [ -n "$x" ] || x=0
-    [ -n "$y" ] || y=0
-    [ -n "$transform" ] || transform=0
-    hyprctl eval "hl.monitor({ output = \"$output\", mode = \"preferred\", position = \"${x}x${y}\", scale = 1, transform = ${transform} })" >/dev/null 2>&1
+cleanup_mirror() {
+    if [ -f "$STATE_FILE" ]; then
+        # shellcheck disable=SC1090
+        . "$STATE_FILE"
+        if [ -n "${mirror_output:-}" ]; then
+            hyprctl output remove "$mirror_output" >/dev/null 2>&1
+        fi
+        rm -f "$STATE_FILE"
+    fi
 }
 
 case "$1" in
     "start")
         if ! pgrep -x wayvnc > /dev/null; then
-            output=$(get_output)
-            save_monitor_state "$output"
-            set_scale_one "$output"
-            wayvnc --output="$output" --max-fps=60 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
+            src=$(get_source_output)
+            mirror=$(create_mirror_output "$src")
+            if [ -n "$mirror" ]; then
+                printf 'mirror_output=%s\nsource=%s\n' "$mirror" "$src" > "$STATE_FILE"
+                target="$mirror"
+            else
+                target="$src"
+            fi
+            wayvnc --output="$target" --max-fps=60 0.0.0.0 "$(get_port)" > /tmp/wayvnc.log 2>&1 &
             echo "started"
         else
             echo "already running"
@@ -85,7 +87,7 @@ case "$1" in
         ;;
     "stop")
         pkill -x wayvnc
-        restore_monitor_state
+        cleanup_mirror
         echo "stopped"
         ;;
     "status")
