@@ -12,7 +12,9 @@ get_ip() {
 case "$1" in
     "start")
         if ! pgrep -x wayvnc > /dev/null; then
-            wayvnc 0.0.0.0 > /tmp/wayvnc.log 2>&1 &
+            # Render the cursor into the framebuffer and capture every output so
+            # pointer coordinates stay aligned on multi-monitor/mixed-scale setups.
+            wayvnc --render-cursor --desktop 0.0.0.0 > /tmp/wayvnc.log 2>&1 &
             echo "started"
         else
             echo "already running"
